@@ -1,0 +1,11 @@
+[package]
+version = "0.1.0"
+name = "zstable-settlement-guest-program"
+edition = "2021"
+
+[dependencies]
+alloy-sol-types = { workspace = true }
+alloy-primitives = "*"
+sp1-zkvm = { version = "6.0.1" }
+zstable-settlement-guest-lib = { path = "../lib" }
+zstable-settlement-executor = { path = "../../settlement-executor" }

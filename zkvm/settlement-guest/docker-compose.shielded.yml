@@ -1,0 +1,43 @@
+# Marlin Oyster CVM deployment for the Zstable BLIND SEQUENCER (operator-blind, TEE-enforced privacy).
+# The enclave decrypts the sealed order, executes it, and proves it with SP1 — all inside — so the
+# operator only ever relays ciphertext. Deploy:
+#   oyster-cvm deploy --wallet-private-key <key> --duration-in-minutes N \
+#       --docker-compose docker-compose.shielded.yml --arch amd64
+#
+# Then point the dApp backend at it:  BLIND_URL=http://<enclave-ip>:4000 node server.js
+#
+# SECURITY: NETWORK_PRIVATE_KEY is the SP1 network (PROVE) key. Baking it here puts it in the attested
+# compose; prefer provisioning it via Oyster's secret injection. Use a DEDICATED key funded only with PROVE.
+services:
+  shielded-sequencer:
+    # Pin the digest of your pushed image (never :latest — Oyster caches tags). Build and push a
+    # fresh zstable-shielded-sequencer image (see shielded.Dockerfile) before deploying — this repo does
+    # not ship a pre-published digest.
+    image: ghcr.io/<you>/zstable-shielded-sequencer-mainnet@sha256:<fill-in-after-build>
+    init: true
+    network_mode: host
+    restart: unless-stopped
+    environment:
+      - PORT=4000
+      - RUST_LOG=info
+      - SP1_PROVER=network
+      # Basis points of gross output retained as an LP fee per trade (30 = 0.30%); capped by the
+      # protocol's MAX_FEE_BPS (500 = 5%) regardless of this value.
+      - FEE_BPS=30
+      # Provision this as an Oyster secret rather than inlining it (never bake a real key into a
+      # file that gets built into an image/committed to source). Use a FRESH, DEDICATED key funded
+      # only with PROVE credits — never reuse a key from another project or environment.
+      - NETWORK_PRIVATE_KEY=REPLACE_WITH_A_FRESH_DEDICATED_PROVE_KEY
+      # Oyster serves the raw AWS Nitro attestation on loopback :1300 inside the enclave.
+      - ATTESTATION_ENDPOINT=http://127.0.0.1:1300/attestation/raw
+      # OPTIONAL, disabled unless set: stable P-256 pubkey (hex, uncompressed SEC1) a sealed
+      # deposit<->recipient compliance record is sent to per trade. Generate the keypair OFFLINE
+      # (never on this server) \u2014 only the public half belongs here. See
+      # /memories/repo/roadmap-tee-compliance.md and /memories/session/plan.md for the full design
+      # (single-custodian + offline backup, public log required before any decryption).
+      # - COMPLIANCE_PUBKEY=<hex pubkey, generated offline>
+
+    # Expose the Nitro Security Module so the sequencer can bind its sealing key into the attestation
+    # (user_data/public_key = P-256 pubkey). Without this it falls back to the unbound Oyster endpoint.
+    devices:
+      - /dev/nsm:/dev/nsm
